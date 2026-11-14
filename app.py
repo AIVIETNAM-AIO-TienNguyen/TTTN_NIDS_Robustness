@@ -41,9 +41,8 @@ CHANGED_COLUMNS = [
     "Flow Bytes/s",
 ]
 LIMITATION_NOTE = (
-    "Dữ liệu NIDS thường mất cân bằng nghiêm trọng: lưu lượng bình thường chiếm "
-    "đa số, còn tấn công là các sự kiện hiếm (rare events). Vì vậy, mô hình có "
-    "thể bị bias về lớp đa số và chưa đạt hiệu năng tối ưu khi phát hiện Attack."
+    "Lưu ý: Do đặc thù mất cân bằng dữ liệu NIDS, mô hình đang tiếp tục được "
+    "tối ưu hóa khả năng phát hiện các cuộc tấn công hiếm gặp."
 )
 
 
@@ -111,10 +110,12 @@ def inject_styles() -> None:
             border: 1px solid var(--dgt-border);
             border-radius: .9rem;
             padding: 1rem 1.1rem;
-            min-height: 7rem;
+            min-height: 8rem;
+            display: flex;
+            flex-direction: column;
         }
         .dgt-card h4 { margin: 0 0 .45rem; color: var(--dgt-text); }
-        .dgt-card p { margin: 0; color: var(--dgt-muted); line-height: 1.5; }
+        .dgt-card p { margin: 0; color: var(--dgt-muted); line-height: 1.5; flex: 1; }
         .dgt-pill {
             display: inline-block;
             padding: .25rem .55rem;
@@ -142,6 +143,7 @@ def inject_styles() -> None:
             border-radius: 0 .6rem .6rem 0;
             color: #d8e2ef;
         }
+        .overview-note { margin-top: 1.5rem; }
         .block-container { padding-top: 2rem; padding-bottom: 3rem; }
         </style>
         """,
@@ -155,7 +157,7 @@ def ui_pills(items: list[tuple[str, str]], container=st) -> None:
 
 
 st.set_page_config(
-    page_title="DGT NIDS - Hệ thống kiểm thử và Đánh giá mô hình",
+    page_title="DGT NIDS Robustness - Đánh giá độ bền vững của hệ thống phát hiện xâm nhập",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -318,7 +320,7 @@ def metrics_frame(result: dict) -> pd.DataFrame:
 
 
 def page_header(title: str, description: str) -> None:
-    st.markdown('<div class="dgt-kicker">DGT NIDS / ROBUSTNESS CONSOLE</div>', unsafe_allow_html=True)
+    st.markdown('<div class="dgt-kicker">DGT NIDS / ĐÁNH GIÁ ĐỘ BỀN VỮNG</div>', unsafe_allow_html=True)
     st.title(title)
     if description:
         st.markdown(f'<div class="dgt-subtitle">{description}</div>', unsafe_allow_html=True)
@@ -430,10 +432,7 @@ def sidebar() -> str:
         """,
         unsafe_allow_html=True,
     )
-    st.sidebar.markdown("## 🛡️ DGT NIDS")
-    st.sidebar.markdown("**ROBUSTNESS CONSOLE**")
-    st.sidebar.caption("Adversarial ML · Network Intrusion Detection")
-    st.sidebar.markdown("---")
+    st.sidebar.markdown("## 🛡️ DGT NIDS ROBUSTNESS")
     page = st.sidebar.radio(
         "Mục lục",
         [
@@ -445,39 +444,38 @@ def sidebar() -> str:
         label_visibility="collapsed",
     )
     st.sidebar.markdown("---")
-    st.sidebar.caption("PIPELINE TRẠNG THÁI")
     ui_pills(
-        [("3 models", "green"), ("82 features", ""), ("Day split", "amber")],
+        [("3 mô hình", "green"), ("82 đặc trưng", ""), ("Chia theo ngày", "amber")],
         st.sidebar,
     )
-    st.sidebar.caption("Padding là biến đổi feature-level, không phải replay PCAP.")
+    st.sidebar.caption("Padding là biến đổi ở cấp đặc trưng, không phải phát lại PCAP.")
     return page
 
 
 def overview() -> None:
     page_header(
-        "DGT NIDS - Hệ thống kiểm thử và Đánh giá mô hình",
+        "DGT NIDS Robustness - Đánh giá độ bền vững của hệ thống phát hiện xâm nhập",
         "",
     )
     st.markdown(
-        '<div class="dgt-note">Mục tiêu demo: quan sát một flow Attack đi qua '
-        'detector, kiểm tra tác động của Padding và đo độ suy giảm robustness. '
-        'Kết quả chỉ áp dụng cho feature-level và day split.</div>',
+        '<div class="dgt-note">Mục tiêu demo: quan sát một luồng tấn công đi qua '
+        'bộ phát hiện, kiểm tra tác động của Padding và đo sự thay đổi về độ bền vững. '
+        'Kết quả chỉ áp dụng cho biến đổi ở cấp đặc trưng và dữ liệu được chia theo ngày.</div>',
         unsafe_allow_html=True,
     )
-    st.markdown("### Mission control")
+    st.markdown("### Các tính năng chính")
     cols = st.columns(3)
     cards = [
-        ("01 · Detect", "Đọc flow sạch và xem sự đồng thuận giữa Random Forest, XGBoost và LightGBM."),
-        ("02 · Perturb", "Áp dụng Padding có kiểm soát, sau đó chạy Validator trên từng thay đổi."),
-        ("03 · Evaluate", "Đặt clean và perturbed cạnh nhau để giải thích Recall, F1 và FPR."),
+        ("01 · Phát hiện xâm nhập", "Dự đoán luồng dữ liệu sạch bằng Random Forest, XGBoost và LightGBM."),
+        ("02 · Biến đổi dữ liệu", "Áp dụng Padding có kiểm soát và kiểm tra tính hợp lệ bằng Validator."),
+        ("03 · Đánh giá độ bền vững", "So sánh dữ liệu sạch và sau Padding qua Recall, F1 và FPR."),
     ]
     for col, (title, body) in zip(cols, cards):
         col.markdown(f'<div class="dgt-card"><h4>{title}</h4><p>{body}</p></div>', unsafe_allow_html=True)
-    st.markdown("### Demo guardrails")
-    ui_pills([("Feature-level only", ""), ("Validator enabled", "green"), ("No PCAP replay", "amber")])
-    st.caption("Luồng trình diễn được thiết kế để phân biệt rõ tính hợp lệ của biến đổi và độ chính xác của mô hình.")
-    st.warning(f"*{LIMITATION_NOTE}*")
+    st.markdown(
+        f'<div class="dgt-note overview-note">{LIMITATION_NOTE}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def batch_prediction_view(

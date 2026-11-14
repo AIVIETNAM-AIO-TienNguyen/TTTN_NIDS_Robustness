@@ -1,137 +1,178 @@
-# NIDS Robustness
+# DGT NIDS Robustness
 
-Demo Streamlit cho thực nghiệm NIDS theo phương pháp chia dữ liệu theo ngày
-(nhánh A). Ứng dụng sử dụng các model bundle đã lưu, scaler được fit trên tập
-train, cùng logic Padding và Validator từ notebook. Ứng dụng không huấn luyện
-lại model và không tạo số liệu giả.
+## Giới thiệu
 
-Giao diện được tổ chức theo luồng trình diễn: **Tổng quan → Phát hiện xâm
-nhập → Áp dụng biến đổi dữ liệu → Đánh giá độ bền vững của mô hình**. Thiết kế
-dark cybersecurity/SOC làm nổi bật mục tiêu thí nghiệm, trạng thái Validator và
-so sánh clean/perturbed. Nội dung dùng tiếng Việt, giữ các thuật ngữ ML/NIDS
-phổ biến như Benign, Attack, Recall, F1 và FPR.
+DGT NIDS Robustness là ứng dụng Streamlit hỗ trợ phát hiện xâm nhập mạng và
+đánh giá độ bền vững của các mô hình NIDS. Ứng dụng sử dụng Random Forest,
+XGBoost và LightGBM đã được huấn luyện trên dữ liệu chia theo ngày. Người dùng
+có thể dự đoán dữ liệu sạch, áp dụng Padding ở cấp đặc trưng và kiểm tra kết quả
+bằng Validator. Kết quả trước và sau biến đổi được so sánh qua các chỉ số Recall,
+F1 và FPR. Dự án được xây dựng phục vụ công việc thực tập tại công ty DTG.
 
-Trong các luồng dự đoán, có thể chọn threshold `fpr0.1%`, `fpr1%` hoặc `0.5`.
-`fpr0.1%` là mặc định theo mục tiêu thí nghiệm và ưu tiên giảm False Positive,
-vì vậy có thể bỏ sót nhiều Attack. Chọn `fpr1%` khi cần một kịch bản demo bắt
-được nhiều Attack hơn; lựa chọn threshold được áp dụng nhất quán cho Detection,
-Padding batch và Robustness evaluation.
+## Video demo
+
+[![Xem video demo trên YouTube](https://img.youtube.com/vi/D5Tw-m7Jx48/0.jpg)](https://www.youtube.com/watch?v=D5Tw-m7Jx48)
 
 ## Cấu trúc dự án
 
 ```text
-web_demo/
-├── app.py                  # Entrypoint Streamlit
-├── src/                    # Data, model, evaluation, padding và validator
-├── data/                   # Dataset demo và scaler
-├── artifacts/models/       # Model bundles đã huấn luyện
-├── notebooks/              # Notebook nghiên cứu và đánh giá
-├── requirements.txt        # Dependency ghim phiên bản
-└── README.md
+.
+├── artifacts/
+│   └── models/
+│       ├── lightgbm.joblib
+│       ├── random_forest.joblib
+│       └── xgboost.joblib
+├── data/
+│   ├── 100_Friday_non_scale.parquet
+│   ├── 100_Thursday_non_scale.parquet
+│   ├── 100_Thursday_scaled.parquet
+│   └── scaler_day_based_82.joblib
+├── notebooks/
+│   ├── Khoa_Models/
+│   │   ├── A_theo_ngay_huan_luyen_danh_gia.ipynb
+│   │   ├── B_70_15_15_huan_luyen_danh_gia.ipynb
+│   │   └── C_so_sanh_hai_nhanh.ipynb
+│   ├── Tien_Adversarial_Perturbation/
+│   │   ├── A_padding_on_day_test.ipynb
+│   │   ├── B_padding_on_15_test.ipynb
+│   │   └── robustness_evaluation/
+│   │       ├── A_Eval_Robustness.ipynb
+│   │       ├── B_Eval_Robustness.ipynb
+│   │       ├── nhan_xet_ket_qua_A_Eval_Robustness.md
+│   │       ├── nhan_xet_ket_qua_B_Eval_Robustness.md
+│   │       └── so_sanh_nhanh_A_day_based_vs_B_70_15_15.md
+│   └── Trung_Data/
+│       ├── EDA.ipynb
+│       ├── tuan2_kiemke_ganNhan_CIC_IDS_2017.ipynb
+│       ├── tuan3_cleaning_kiemtra_thongke_theo_ngay.ipynb
+│       └── tuan4_preprocessing_leakage_check.ipynb
+├── src/
+│   ├── __init__.py
+│   ├── data_service.py
+│   ├── evaluation.py
+│   ├── model_service.py
+│   ├── perturbation.py
+│   └── validator.py
+├── .dockerignore
+├── .gitignore
+├── app.py
+├── Dockerfile
+├── README.md
+└── requirements.txt
 ```
 
-`.venv/`, cache Python và checkpoint của Jupyter là file cục bộ, đã được đưa
-vào `.gitignore` và không thuộc source cần chia sẻ.
+## Các tính năng chính
 
-Trong **Phát hiện xâm nhập**, có thể tải file CSV hoặc Parquet nhỏ (tối đa
-10 MB và 10.000 dòng) nếu có đủ 82 feature theo đúng tên. File tải lên được
-coi là dữ liệu chưa scale; app sẽ dùng scaler trong model bundle trước khi
-dự đoán. Detection hỗ trợ dự đoán một flow, một lô tùy chọn số dòng hoặc toàn
-bộ dữ liệu; kết quả lô hiển thị preview và cho tải xuống toàn bộ CSV. Trong
-**Áp dụng biến đổi dữ liệu**, Padding mặc định chỉ chạy trên flow Attack; có
-thể áp dụng cho một dòng hoặc một lô tối đa 200 flow Attack để demo phản hồi
-nhanh. Kết quả được lưu trong
-phiên làm việc để trang **Đánh giá độ bền vững của mô hình** sử dụng trực tiếp,
-không cần chọn lại cấu hình.
+- **Phát hiện xâm nhập:** Dự đoán một flow, một lô dữ liệu hoặc toàn bộ dữ liệu
+  bằng Random Forest, XGBoost và LightGBM. Người dùng có thể chọn threshold,
+  xem xác suất Attack và tải kết quả dự đoán dưới dạng CSV.
+- **Áp dụng biến đổi dữ liệu:** Áp dụng Padding tĩnh hoặc Padding ngẫu nhiên
+  trên các flow Attack ở cấp đặc trưng. Mỗi biến đổi được kiểm tra bằng
+  Validator và kết quả được lưu trong phiên làm việc.
+- **Đánh giá độ bền vững:** So sánh dự đoán trên dữ liệu sạch và dữ liệu sau
+  Padding với cùng ba mô hình. Giao diện hiển thị các chỉ số Accuracy, Recall,
+  F1, FPR và biểu đồ so sánh kết quả.
 
-## Chạy ứng dụng
+## Yêu cầu (requirements)
+
+- Python 3.11 trở lên.
+- Windows PowerShell hoặc Docker Desktop.
+- Các thư viện Python được ghim phiên bản trong
+  [requirements.txt](requirements.txt):
+
+```text
+streamlit==1.67.0
+pandas==3.1.1
+numpy==2.4.6
+plotly==7.1.0
+joblib==1.6.0
+scikit-learn==1.8.0
+xgboost==3.2.0
+lightgbm==4.7.0
+pyarrow==26.0.1
+```
+
+## Hướng dẫn tải
 
 ```powershell
-# Tạo môi trường ảo (chỉ cần chạy một lần):
+git clone https://github.com/AIVIETNAM-AIO-TienNguyen/TTTN_NIDS_Robustness.git
+Set-Location TTTN_NIDS_Robustness
+```
+
+## Hướng dẫn chạy
+
+### Chạy trên Windows PowerShell
+
+```powershell
 python -m venv .venv
-
-# Kích hoạt môi trường ảo trên Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
-
-# Cập nhật pip và cài dependencies trong môi trường ảo:
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-
-# Kiểm tra Python đang chạy từ môi trường ảo:
-python -c "import sys; print(sys.executable)"
-
-# Khởi động Streamlit:
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
-## Chạy bằng Docker
-
-Yêu cầu Docker Desktop đang hoạt động. Từ thư mục gốc của project:
-
-```powershell
-# Build image:
-docker build -t dgt-nids:latest .
-
-# Chạy container:
-docker run --rm -p 8501:8501 dgt-nids:latest
-```
-
-Mở [http://localhost:8501](http://localhost:8501). Image chứa `src/`, dataset
-demo, scaler và model bundles trong `artifacts/models/`; notebook và môi trường
-ảo local không được đưa vào image.
-
-Nếu PowerShell chặn script kích hoạt, chạy một lần trong PowerShell hiện tại:
+Nếu PowerShell chặn script kích hoạt, chạy:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
-Sau khi kích hoạt `.venv`, mọi lệnh `python`, `pip` và `streamlit` trong tài liệu
-này đều phải được chạy trong cùng cửa sổ PowerShell. Có thể kiểm tra nhanh bằng
-`python -c "import streamlit; print(streamlit.__version__)"`.
-
-Mặc định giao diện xử lý tối đa 5.000 dòng để demo phản hồi nhanh. Đặt giới
-hạn bằng `0` nếu muốn xử lý toàn bộ tập test nhánh A; giao diện sẽ hiển thị
-chính xác số dòng thực tế được sử dụng.
-
-## Hợp đồng dữ liệu
-
-- `data/100_Thursday_scaled.parquet`: bản scaled của bộ demo 100 dòng.
-- `data/100_Thursday_non_scale.parquet`: nguồn mặc định để thực hiện biến đổi
-  Padding; gồm 50 dòng Benign và 50 dòng Attack.
-- Các file `.csv` tương ứng là fallback cho đúng bộ `100_Thursday_*` khi cần.
-- `data/scaler_day_based_82.joblib`: scaler được fit trên tập train và được nạp
-  trực tiếp khi khởi tạo mọi model bundle để scale dữ liệu sạch và dữ liệu sau
-  Padding.
-- Các model bundle trong `artifacts/models/` cần runtime `xgboost` và
-  `lightgbm` để tải đủ cả ba model.
-- Cần có đủ ba file model bundle trong `artifacts/models/` trước khi chạy các
-  luồng dự đoán và đánh giá robustness.
-- `Benign = 0`, `Attack = 1`.
-
-Padding là biến đổi ở cấp feature/flow, không phải phát lại packet thực tế.
-Validator hợp lệ chỉ có nghĩa là mẫu vượt qua các rule đã được triển khai,
-không đồng nghĩa với việc mô hình dự đoán đúng hoặc dữ liệu chắc chắn hợp lệ
-về mặt mạng thực tế.
-
-Nhãn dự đoán trong giao diện dùng ngưỡng `fpr0.1%` đã lưu trong từng model
-bundle, thay vì ngưỡng mặc định 0,5 của `estimator.predict()`. Các ngưỡng này
-được chọn trên validation để giữ FPR ở mức mục tiêu của thí nghiệm.
-
-## Kiểm thử
+### Chạy bằng Docker
 
 ```powershell
-python -m pytest -q
+docker build -t dgt-nids:latest .
+docker run --rm -p 8501:8501 dgt-nids:latest
 ```
 
-Các test bao phủ công thức Padding tương đương notebook, Random Padding có
-thể tái lập, phát hiện vi phạm Validator, tính metric và lấy mẫu đúng schema.
+Mở [http://localhost:8501](http://localhost:8501) trên trình duyệt.
 
-## Lưu ý về tương thích phiên bản
+## Hướng dẫn sử dụng
 
-Metadata của model bundle ghi nhận scikit-learn 1.8.0, vì vậy
-`requirements.txt` ghim phiên bản này để tương thích với estimator. File
-`scaler_day_based_82.joblib` được tạo bằng phiên bản scikit-learn cũ hơn nên
-có thể vẫn xuất hiện cảnh báo tương thích; scaler được load nguyên trạng và
-không được fit lại.
+```mermaid
+flowchart TD
+    A([Mở ứng dụng Streamlit]) --> B[Tổng quan]
+    B --> C{Chọn chức năng trong sidebar}
+
+    C -->|Phát hiện xâm nhập| D[Chọn threshold]
+    D --> E{Chọn nguồn dữ liệu}
+    E -->|Không tải file| F[Dùng bộ 100_Thursday mặc định]
+    E -->|CSV / Parquet| G[Kiểm tra file và 82 feature]
+    G -->|Không hợp lệ| G1[Hiển thị lỗi và yêu cầu file khác]
+    G -->|Hợp lệ| H
+    F --> H{Chọn phạm vi dự đoán}
+    H -->|Một flow| I[Chọn dòng dữ liệu]
+    H -->|Theo lô| J[Chọn số dòng]
+    H -->|Toàn bộ dữ liệu| K[Chọn toàn bộ dữ liệu]
+    I --> L[Chạy dự đoán sạch]
+    J --> L
+    K --> L
+    L --> M[Chạy Random Forest, XGBoost và LightGBM]
+    M --> N[Hiển thị kết quả và cho tải CSV]
+
+    C -->|Áp dụng biến đổi dữ liệu| O[Chọn flow Attack]
+    O --> P[Chọn Padding tĩnh/ngẫu nhiên]
+    P --> Q[Chọn mức pad_bytes, seed và threshold]
+    Q --> R{Chọn phạm vi}
+    R -->|Một flow| S[Áp dụng Padding]
+    R -->|Lô trên mẫu| T[Áp dụng tối đa 200 flow]
+    S --> U[Chạy Validator]
+    T --> U
+    U --> V[Lưu kết quả vào phiên làm việc]
+
+    C -->|Đánh giá độ bền vững| W{Đã có experiment Padding?}
+    W -->|Chưa| X[Yêu cầu chạy experiment ở trang biến đổi]
+    W -->|Có| Y[Chọn threshold đánh giá]
+    Y --> Z[Đánh giá cả ba model]
+    Z --> AA[So sánh dữ liệu sạch và sau Padding]
+    AA --> AB[Hiển thị Recall, F1, FPR và biểu đồ]
+```
+
+## Thành viên
+
+```text
+- Nguyễn Thanh Phong – Leader
+- Trọng Minh Trung - Data Analysis
+- Phạm Bùi Đăng Khoa - Models
+- Nguyễn Xuân Tiến - Perturbation
+```
